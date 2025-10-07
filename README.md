@@ -1,5 +1,6 @@
-![](samplecover.png)
 # AI-Powered R Package Builder
+
+![](samplecover.png)
 
 Welcome to the AI-Powered R Package Builder! This is a modern, browser-based Integrated Development Environment (IDE) designed to streamline the creation of R packages. It combines a powerful code editor, a persistent file system, and an integrated AI assistant powered by Google's Gemini API to provide a seamless development experience right in your web browser.
 
