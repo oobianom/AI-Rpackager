@@ -1,4 +1,4 @@
-# AI-Powered R Package Builder
+# AI-Powered R Package Builder (www.chat.rpkg.net)
 
 ![](samplecover.png)
 
