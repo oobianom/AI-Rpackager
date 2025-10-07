@@ -1,0 +1,86 @@
+---
+title: "Handling Different PK Data Types"
+author: "R Packager"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Handling Different PK Data Types}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(NCAP)
+```
+
+## Introduction
+
+Non-compartmental analysis (NCA) can be applied to various types of pharmacokinetic (PK) data, including single-dose and multiple-dose studies. This vignette demonstrates how to prepare and analyze different PK data types using the functions in the `NCAP` package.
+
+## Single-Dose PK Data
+
+Single-dose studies involve administering a single dose of a drug and then collecting blood samples over time to observe its concentration profile.
+
+Let's simulate some single-dose PK data for demonstration.
+
+```{r single_dose_data}
+# Simulate single-dose PK data
+time_single <- c(0, 0.25, 0.5, 1, 2, 4, 6, 8, 12, 24)
+conc_single <- c(0, 15, 25, 40, 35, 20, 10, 5, 2, 0.5)
+single_dose_data <- data.frame(Time = time_single, Concentration = conc_single)
+print(single_dose_data)
+```
+
+Now, we can apply our `NCAP` functions to this single-dose data.
+
+```{r single_dose_nca}
+# Calculate AUC for single-dose data
+auc_single <- calculate_auc_linear(time = single_dose_data$Time, concentration = single_dose_data$Concentration)
+cat("AUC (single-dose):", auc_single, "\n")
+
+# Calculate Cmax and Tmax for single-dose data
+cmax_tmax_single <- calculate_cmax_tmax(time = single_dose_data$Time, concentration = single_dose_data$Concentration)
+cat("Cmax (single-dose):", cmax_tmax_single$Cmax, "\n")
+cat("Tmax (single-dose):", cmax_tmax_single$Tmax, "\n")
+
+# Note: Half-life, Clearance, Vd, AUMC, and Lambda_z would require additional context
+# like dose, volume of blood, or more data points for accurate estimation,
+# but can be applied similarly if those parameters are available.
+```
+
+## Multiple-Dose PK Data
+
+Multiple-dose studies involve repeated administration of a drug over a period to achieve steady-state concentrations. Analyzing multiple-dose data often focuses on steady-state parameters.
+
+Let's simulate some multiple-dose PK data, focusing on a dosing interval at steady state.
+
+```{r multiple_dose_data}
+# Simulate multiple-dose (steady-state) PK data
+time_multiple <- c(0, 0.5, 1, 2, 4, 6, 8, 12)
+conc_multiple <- c(10, 25, 35, 45, 30, 20, 15, 12) # At steady state
+multiple_dose_data <- data.frame(Time = time_multiple, Concentration = conc_multiple)
+print(multiple_dose_data)
+```
+
+Applying `NCAP` functions to multiple-dose data within a dosing interval.
+
+```{r multiple_dose_nca}
+# Calculate AUC over a dosing interval at steady state
+auc_multiple <- calculate_auc_linear(time = multiple_dose_data$Time, concentration = multiple_dose_data$Concentration)
+cat("AUC (multiple-dose interval):", auc_multiple, "\n")
+
+# Calculate Cmax and Tmax over a dosing interval
+cmax_tmax_multiple <- calculate_cmax_tmax(time = multiple_dose_data$Time, concentration = multiple_dose_data$Concentration)
+cat("Cmax (multiple-dose interval):", cmax_tmax_multiple$Cmax, "\n")
+cat("Tmax (multiple-dose interval):", cmax_tmax_multiple$Tmax, "\n")
+
+# For other parameters like Half-life or Clearance in multiple-dose scenarios,
+# specific methods like AUCss (AUC at steady-state) or calculations based on accumulation
+# might be needed, often requiring dose information and dosing interval.
+```
+
+This vignette provides a basic framework. Depending on the complexity of your multiple-dose data (e.g., varying doses, irregular sampling), further data manipulation might be required before applying `NCAP` functions. Always ensure your data is properly structured and represents the concentration-time profile accurately for the period of interest.

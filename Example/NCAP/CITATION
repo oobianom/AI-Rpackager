@@ -1,0 +1,14 @@
+
+year <- format(Sys.Date(), "%Y")
+repo <- "https://github.com/yourusername/NCAP" # Replace with your GitHub repo
+
+NCAP_citation <- bibentry(
+  bibtype = "Manual",
+  title = "NCAP: A Comprehensive R Package for Non-Compartmental Analysis (NCA)",
+  author = person("Your", "Name", email = "your.email@example.com", role = c("aut", "cre")), # Replace with your name and email
+  year = year,
+  url = repo,
+  version = packageVersion("NCAP") # This will retrieve the package version
+)
+
+print(NCAP_citation, style = "text")

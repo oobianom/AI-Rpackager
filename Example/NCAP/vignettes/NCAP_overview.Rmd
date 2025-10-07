@@ -1,0 +1,115 @@
+---
+title: "NCAP Package Overview"
+author: "R Packager"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{NCAP Package Overview}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction to NCAP
+
+The `NCAP` package provides a suite of functions for performing Non-Compartmental Analysis (NCA) of pharmacokinetic (PK) data. This vignette offers a comprehensive overview of the package's capabilities and demonstrates how to use its core functions.
+
+## Installation
+
+You can install the development version of NCAP from GitHub with:
+
+```r
+# install.packages("devtools")
+# devtools::install_github("your_username/NCAP")
+```
+
+## Basic Usage
+
+Let's load the package and create some sample PK data to illustrate the usage of the functions.
+
+```{r example-data}
+library(NCAP)
+time <- c(0, 0.25, 0.5, 1, 2, 4, 6, 8, 12, 24)
+concentration <- c(0, 10, 25, 40, 35, 20, 12, 7, 3, 1)
+pk_data <- data.frame(Time = time, Concentration = concentration)
+print(pk_data)
+```
+
+### Area Under the Curve (AUC)
+
+The `calculate_auc_linear` function computes the AUC using the linear trapezoidal rule.
+
+```{r auc-example}
+auc_val <- calculate_auc_linear(time = pk_data$Time, concentration = pk_data$Concentration)
+print(paste("AUC (linear trapezoidal):", round(auc_val, 2)))
+```
+
+### Cmax and Tmax
+
+The `calculate_cmax_tmax` function identifies the maximum concentration (Cmax) and the time at which it occurs (Tmax).
+
+```{r cmax-tmax-example}
+cmax_tmax <- calculate_cmax_tmax(concentration = pk_data$Concentration, time = pk_data$Time)
+print(paste("Cmax:", round(cmax_tmax$Cmax, 2)))
+print(paste("Tmax:", cmax_tmax$Tmax))
+```
+
+### Half-life (t1/2)
+
+The `calculate_half_life` function estimates the terminal half-life. Note that this often requires a proper estimation of lambda_z first.
+
+```{r half-life-example}
+# For demonstration, let's assume a hypothetical lambda_z for half-life calculation
+# In a real scenario, you would calculate lambda_z from the terminal phase
+hypothetical_lambda_z <- 0.15 # e.g., from a linear regression of the terminal phase
+half_life_val <- calculate_half_life(lambda_z = hypothetical_lambda_z)
+print(paste("Half-life:", round(half_life_val, 2)))
+```
+
+### Clearance (CL)
+
+The `calculate_clearance` function estimates the clearance.
+
+```{r clearance-example}
+dose <- 100 # Example dose
+cl_val <- calculate_clearance(dose = dose, auc = auc_val)
+print(paste("Clearance:", round(cl_val, 2)))
+```
+
+### Volume of Distribution (Vd)
+
+The `calculate_volume_of_distribution` function estimates the volume of distribution.
+
+```{r vd-example}
+vd_val <- calculate_volume_of_distribution(dose = dose, lambda_z = hypothetical_lambda_z, auc = auc_val)
+print(paste("Volume of Distribution:", round(vd_val, 2)))
+```
+
+### Area Under the Moment Curve (AUMC)
+
+The `calculate_aumc` function computes the AUMC.
+
+```{r aumc-example}
+aumc_val <- calculate_aumc(time = pk_data$Time, concentration = pk_data$Concentration)
+print(paste("AUMC (linear trapezoidal):", round(aumc_val, 2)))
+```
+
+### Lambda_z (Terminal elimination rate constant)
+
+The `calculate_lambda_z` function estimates the terminal elimination rate constant. This typically involves identifying the linear terminal phase of the concentration-time curve.
+
+```{r lambda-z-example}
+# This function would require a specific range of time points for the terminal phase
+# For illustration, let's assume the last 3 points are in the terminal phase
+terminal_time <- tail(pk_data$Time, 3)
+terminal_concentration <- tail(pk_data$Concentration, 3)
+lambda_z_results <- calculate_lambda_z(time = terminal_time, concentration = terminal_concentration)
+print(paste("Lambda_z:", round(lambda_z_results$lambda_z, 4)))
+print(paste("R-squared for Lambda_z:", round(lambda_z_results$r_squared, 4)))
+```

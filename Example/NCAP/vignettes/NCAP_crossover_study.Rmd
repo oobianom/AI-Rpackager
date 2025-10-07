@@ -1,0 +1,133 @@
+---
+title: "NCA Analysis in Crossover Studies"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{NCA Analysis in Crossover Studies}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction to Crossover Study Analysis with NCAP
+
+Crossover studies are a common design in pharmacokinetic research, particularly when comparing different formulations or treatments within the same subject. In these studies, each subject receives all treatments in a sequence, often separated by a washout period. This design helps to reduce inter-subject variability, making it easier to detect differences between treatments.
+
+This vignette will demonstrate how to perform Non-Compartmental Analysis (NCA) using the `NCAP` package for data typically generated in a crossover study. We will focus on organizing your data and applying the `NCAP` functions to extract key PK parameters for each treatment period and subject.
+
+# Example Dataset for a Crossover Study
+
+Let's simulate a dataset representing a 2-period, 2-treatment crossover study. In this example, subjects receive Treatment A and Treatment B, with a washout period in between.
+
+```{r}
+library(NCAP)
+library(dplyr) # For data manipulation
+
+# Simulate PK data for a crossover study
+set.seed(123)
+n_subjects <- 10
+treatments <- c("A", "B")
+periods <- c(1, 2)
+time_points <- c(0, 0.25, 0.5, 1, 2, 4, 6, 8, 12, 24)
+
+# Function to generate PK profile
+generate_pk_profile <- function(subject_id, treatment, period) {
+  # Simple one-compartment model simulation for demonstration
+  dose <- 100
+  ka <- 0.5
+  kel <- ifelse(treatment == "A", 0.1, 0.15) # Different elimination for treatments
+  vd <- ifelse(treatment == "A", 20, 25) # Different Vd for treatments
+  
+  # Simulate concentration-time data
+  conc_data <- data.frame(
+    Subject = subject_id,
+    Treatment = treatment,
+    Period = period,
+    Time = time_points,
+    Concentration = numeric(length(time_points))
+  )
+  
+  for (i in seq_along(time_points)) {
+    t <- time_points[i]
+    if (t == 0) {
+      conc <- 0
+    } else {
+      conc <- (dose / vd) * (ka / (ka - kel)) * (exp(-kel * t) - exp(-ka * t))
+    }
+    # Add some random noise
+    conc_data$Concentration[i] <- max(0, conc + rnorm(1, 0, conc * 0.1))
+  }
+  return(conc_data)
+}
+
+# Generate data for all subjects and periods
+crossover_data <- bind_rows(lapply(1:n_subjects, function(s) {
+  # Randomly assign sequence (e.g., AB or BA)
+  sequence <- sample(c("AB", "BA"), 1)
+  
+  if (sequence == "AB") {
+    data_p1_tA <- generate_pk_profile(s, "A", 1)
+    data_p2_tB <- generate_pk_profile(s, "B", 2)
+  } else { # sequence == "BA"
+    data_p1_tB <- generate_pk_profile(s, "B", 1)
+    data_p2_tA <- generate_pk_profile(s, "A", 2)
+  }
+  bind_rows(data_p1_tA, data_p2_tA, data_p1_tB, data_p2_tB) %>%
+    mutate(Sequence = sequence)
+}))
+
+head(crossover_data)
+tail(crossover_data)
+
+```
+
+# Performing NCA for Each Subject and Treatment
+
+When analyzing crossover data, it's crucial to perform NCA for each subject within each treatment period. This means you'll need to group your data by `Subject`, `Treatment`, and `Period`.
+
+Let's calculate AUC and Cmax/Tmax for each profile.
+
+```{r}
+# Group data and apply NCA functions
+nca_results <- crossover_data %>%
+  group_by(Subject, Treatment, Period, Sequence) %>%
+  summarise(
+    AUC_0_last = calculate_auc_linear(Time, Concentration),
+    Cmax = calculate_cmax_tmax(Time, Concentration)$Cmax,
+    Tmax = calculate_cmax_tmax(Time, Concentration)$Tmax,
+    .groups = "drop"
+  )
+
+head(nca_results)
+
+# Now, we can look at the average parameters per treatment
+summary_nca_by_treatment <- nca_results %>%
+  group_by(Treatment) %>%
+  summarise(
+    Mean_AUC = mean(AUC_0_last, na.rm = TRUE),
+    SD_AUC = sd(AUC_0_last, na.rm = TRUE),
+    Mean_Cmax = mean(Cmax, na.rm = TRUE),
+    SD_Cmax = sd(Cmax, na.rm = TRUE),
+    Median_Tmax = median(Tmax, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+print(summary_nca_by_treatment)
+
+```
+
+# Considerations for Crossover Studies
+
+When conducting NCA in crossover studies, keep the following in mind:
+
+*   **Washout Period:** Ensure the washout period is sufficient for the drug to be eliminated before the next treatment period. Inadequate washout can lead to carryover effects, which can confound your results.
+*   **Bioequivalence:** Crossover studies are frequently used for bioequivalence assessments. After calculating individual PK parameters, statistical tests (e.g., ANOVA) are typically applied to compare treatments, often focusing on ratios of Cmax and AUC.
+*   **Sequence Effect:** It's important to check for sequence effects, which occur if the order of treatment administration influences the PK parameters. This can be analyzed statistically.
+*   **Data Structure:** The `NCAP` functions are designed to work with individual concentration-time profiles. Ensure your data is structured appropriately, with clear identifiers for `Subject`, `Treatment`, and `Period`.
+
+This vignette provides a basic framework for analyzing crossover study data with `NCAP`. For more complex analyses, you might integrate `NCAP` with other R packages for statistical modeling and visualization.

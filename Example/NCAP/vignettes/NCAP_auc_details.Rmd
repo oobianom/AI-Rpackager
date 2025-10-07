@@ -1,0 +1,117 @@
+---
+title: "Detailed Explanation of calculate_auc_linear"
+author: "R Packager"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Detailed Explanation of calculate_auc_linear}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction to AUC Calculation
+
+The Area Under the Curve (AUC) is a fundamental pharmacokinetic parameter representing the total drug exposure over time. It's often used to assess bioavailability and bioequivalence. The `NCAP` package provides the `calculate_auc_linear` function to compute AUC.
+
+## The Linear Trapezoidal Rule
+
+The `calculate_auc_linear` function utilizes the linear trapezoidal rule for AUC calculation. This method approximates the area under the concentration-time curve by connecting successive data points with straight lines, forming trapezoids. The area of each trapezoid is then summed to yield the total AUC.
+
+The formula for a single trapezoid between two time points `t1` and `t2` with corresponding concentrations `C1` and `C2` is:
+
+$$ AUC = \frac{(C1 + C2)}{2} \times (t2 - t1) $$
+
+This method assumes a linear change in concentration between observed time points.
+
+## Assumptions of `calculate_auc_linear`
+
+1.  **Linearity between Time Points**: The primary assumption is that the drug concentration changes linearly between consecutive observed time points.
+2.  **Ordered Time Points**: The input `time` vector is assumed to be sorted in ascending order. If not, the function might produce incorrect results or errors.
+3.  **Paired Data**: The `concentration` and `time` vectors must be of the same length and correspond to each other.
+
+## Edge Cases and How They are Handled
+
+### 1. Missing Data (NA values)
+
+The `calculate_auc_linear` function will typically return `NA` if there are `NA` values in either the `concentration` or `time` vectors, as it cannot perform calculations with missing data. It's crucial to handle missing data *before* calling the AUC function (e.g., imputation or exclusion).
+
+```{r missing_data_example, error=TRUE}
+# Example with NA in concentration
+time_na_conc <- c(0, 1, 2, 4, 6)
+concentration_na_conc <- c(10, 8, NA, 3, 1)
+# calculate_auc_linear(concentration_na_conc, time_na_conc) # This would typically error or return NA
+```
+
+It is recommended to filter out `NA` values or handle them appropriately before passing to the function.
+
+### 2. Zero Concentrations
+
+Zero concentrations are valid and are handled correctly by the linear trapezoidal rule. If a concentration drops to zero, the area contributed by that segment will be appropriately calculated.
+
+```{r zero_concentration_example}
+# Assuming calculate_auc_linear is available (replace with actual function call if in package)
+# For demonstration purposes, let's define a mock function
+calculate_auc_linear <- function(concentration, time) {
+  if (length(concentration) != length(time)) {
+    stop("Concentration and time vectors must have the same length.")
+  }
+  if (length(concentration) < 2) {
+    return(0) # Or NA, depending on desired behavior for single point
+  }
+  
+  auc_val <- 0
+  for (i in 1:(length(concentration) - 1)) {
+    auc_val <- auc_val + (concentration[i] + concentration[i+1]) / 2 * (time[i+1] - time[i])
+  }
+  return(auc_val)
+}
+
+time_zero_conc <- c(0, 1, 2, 4, 6)
+concentration_zero_conc <- c(10, 8, 4, 0, 0)
+auc_zero <- calculate_auc_linear(concentration_zero_conc, time_zero_conc)
+print(auc_zero)
+```
+
+### 3. Single Time Point Data
+
+The linear trapezoidal rule requires at least two data points to form a trapezoid. If only a single time point and concentration are provided, the AUC cannot be calculated using this method. The `calculate_auc_linear` function is designed to handle this by returning `0` or `NA` as appropriate for an impossible calculation.
+
+```{r single_point_example}
+time_single <- c(0)
+concentration_single <- c(10)
+auc_single <- calculate_auc_linear(concentration_single, time_single)
+print(auc_single)
+```
+
+### 4. Identical Time Points
+
+If there are identical time points in the input, this typically indicates an issue with the data or study design. The function might still perform a calculation, but the interpretation of such an AUC would be questionable, as `t2 - t1` would be zero, leading to zero contribution from that segment. It's best practice to ensure unique and ascending time points.
+
+```{r identical_time_example}
+time_identical <- c(0, 1, 1, 2, 4)
+concentration_identical <- c(10, 8, 7, 5, 3)
+auc_identical <- calculate_auc_linear(concentration_identical, time_identical)
+print(auc_identical)
+```
+
+### 5. Negative Concentrations
+
+Pharmacokinetic concentrations are typically positive. If negative concentrations appear in the data, it usually indicates measurement error or a limit of quantification issue. The `calculate_auc_linear` function will mathematically process negative values, potentially yielding a negative AUC for that segment. It's up to the user to decide how to handle such biological implausibilities before AUC calculation.
+
+```{r negative_concentration_example}
+time_negative <- c(0, 1, 2, 4, 6)
+concentration_negative <- c(10, 5, -2, 3, 1)
+auc_negative <- calculate_auc_linear(concentration_negative, time_negative)
+print(auc_negative)
+```
+
+## Conclusion
+
+Understanding these assumptions and edge cases is vital for correctly interpreting the results from `calculate_auc_linear`. Always ensure your input data is clean, ordered, and biologically plausible to obtain meaningful AUC values.

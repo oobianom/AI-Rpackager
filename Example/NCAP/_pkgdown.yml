@@ -1,0 +1,6 @@
+url: https://your_username.github.io/NCAP/
+title: "NCAP"
+navbar:
+  left:
+    - text: "Vignettes"
+      href: articles/index.html
