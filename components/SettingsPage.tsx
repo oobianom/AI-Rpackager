@@ -1,27 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EditorSettings } from '../types';
-import { PanelLeftCloseIcon, CodeIcon, HardDriveIcon } from './icons';
+import { PanelLeftCloseIcon, CodeIcon, HardDriveIcon, KeyIcon } from './icons';
 import Tooltip from './Tooltip';
 import ToggleSwitch from './ToggleSwitch';
+import ApiKeyModal from './ApiKeyModal';
 
 interface SettingsPageProps {
   onClose: () => void;
   editorSettings: EditorSettings;
   onEditorSettingsChange: (settings: EditorSettings) => void;
   onResetFileSystem: () => void;
+  userApiKey: string;
+  apiKeyStatus: 'unchecked' | 'valid' | 'invalid';
+  onApiKeySave: (key: string) => Promise<boolean>;
 }
 
-type ActiveTab = 'editor' | 'filesystem';
+type ActiveTab = 'editor' | 'filesystem' | 'ai';
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
   onClose,
   editorSettings,
   onEditorSettingsChange,
   onResetFileSystem,
+  userApiKey,
+  apiKeyStatus,
+  onApiKeySave,
 }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetMessage, setResetMessage] = useState({ text: '', type: '' });
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
   const handleSettingChange = (key: keyof EditorSettings, value: any) => {
     onEditorSettingsChange({ ...editorSettings, [key]: value });
@@ -54,6 +62,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             message={resetMessage}
           />
         );
+      case 'ai':
+        return (
+            <AISettingsContent
+                userApiKey={userApiKey}
+                apiKeyStatus={apiKeyStatus}
+                onApiKeySave={onApiKeySave}
+                onOpenHelp={() => setIsApiKeyModalOpen(true)}
+            />
+        );
       default:
         return null;
     }
@@ -74,17 +91,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 <nav className="space-y-2">
                     <NavItem icon={<CodeIcon />} label="Editor" isActive={activeTab === 'editor'} onClick={() => setActiveTab('editor')} />
                     <NavItem icon={<HardDriveIcon />} label="File System" isActive={activeTab === 'filesystem'} onClick={() => setActiveTab('filesystem')} />
+                    <NavItem icon={<KeyIcon />} label="AI Settings" isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')} />
                 </nav>
             </aside>
             <main className="flex-grow p-6 overflow-y-auto">
                 {renderContent()}
             </main>
         </div>
+        {isApiKeyModalOpen && <ApiKeyModal onClose={() => setIsApiKeyModalOpen(false)} />}
     </div>
   );
 };
 
-// FIX: Changed icon prop type to be more specific, telling TypeScript that the passed element accepts a className prop. This resolves the React.cloneElement error.
+// FIX: Correctly typed the icon prop to allow cloning with a className, resolving the TypeScript error.
 const NavItem: React.FC<{icon: React.ReactElement<{ className?: string }>, label: string, isActive: boolean, onClick: () => void}> = ({ icon, label, isActive, onClick }) => (
     <button 
         onClick={onClick}
@@ -182,6 +201,102 @@ const FileSystemSettingsContent: React.FC<{
     </div>
   </div>
 );
+
+const AISettingsContent: React.FC<{
+    userApiKey: string;
+    apiKeyStatus: 'unchecked' | 'valid' | 'invalid';
+    onApiKeySave: (key: string) => Promise<boolean>;
+    onOpenHelp: () => void;
+}> = ({ userApiKey, apiKeyStatus, onApiKeySave, onOpenHelp }) => {
+    const [keyInput, setKeyInput] = useState(userApiKey);
+    const [isSaving, setIsSaving] = useState(false);
+    const [localStatus, setLocalStatus] = useState(apiKeyStatus);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        setLocalStatus(apiKeyStatus);
+    }, [apiKeyStatus]);
+    
+    useEffect(() => {
+        setKeyInput(userApiKey);
+    }, [userApiKey]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setMessage('');
+        const isValid = await onApiKeySave(keyInput);
+        setLocalStatus(isValid ? 'valid' : 'invalid');
+
+        if (keyInput) {
+            setMessage(isValid ? 'API Key validated and saved successfully!' : 'The provided API Key is invalid.');
+        } else {
+            setMessage('Custom API Key has been removed. The application will use its default key.');
+            setLocalStatus('unchecked');
+        }
+        setIsSaving(false);
+        setTimeout(() => setMessage(''), 5000);
+    };
+
+    const StatusIndicator = () => {
+        if (isSaving) {
+            return <span className="text-sm font-medium text-slate-500">Validating...</span>;
+        }
+        if (!keyInput) {
+             return <span className="text-sm font-medium text-slate-500">Using default key</span>;
+        }
+        switch(localStatus) {
+            case 'valid':
+                return <span className="text-sm font-medium text-green-600">Active and valid</span>;
+            case 'invalid':
+                return <span className="text-sm font-medium text-red-600">Invalid key</span>;
+            default:
+                return <span className="text-sm font-medium text-slate-500">Not validated</span>;
+        }
+    }
+
+    return (
+        <div className="max-w-2xl mx-auto space-y-8">
+            <h3 className="text-xl font-bold text-slate-800">AI Settings</h3>
+            <div className="p-6 bg-white border border-slate-200 rounded-lg">
+                <h4 className="text-lg font-semibold text-slate-800">Gemini API Key</h4>
+                <div className="mt-4 border-t border-slate-200 pt-4 space-y-4">
+                    <div>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Provide your own Gemini API key to use for all AI Assistant requests. If left empty, the application's default key will be used.
+                            <button onClick={onOpenHelp} className="text-sky-600 hover:underline ml-1 font-medium">How do I get a key?</button>
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <label htmlFor="api-key-input" className="text-sm font-medium text-slate-600 flex justify-between items-center">
+                            <span>Your Gemini API Key</span>
+                            <StatusIndicator />
+                        </label>
+                        <input
+                            id="api-key-input"
+                            type="password"
+                            value={keyInput}
+                            onChange={(e) => setKeyInput(e.target.value)}
+                            placeholder="Enter your API key"
+                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        />
+                    </div>
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-sky-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {isSaving ? 'Validating...' : 'Validate & Save Key'}
+                    </button>
+                    {message && (
+                        <p className={`text-sm mt-2 ${localStatus === 'valid' ? 'text-green-600' : localStatus === 'invalid' ? 'text-red-600' : 'text-slate-600'}`}>
+                            {message}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 const SettingRow: React.FC<{label: string, description: string, children: React.ReactNode}> = ({ label, description, children }) => (

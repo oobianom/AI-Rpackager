@@ -2,10 +2,11 @@ import { EditorSettings } from '../types';
 
 export const sidebarConfig = {
   leftSidebar: {
-    title: 'Console',
+    title0: 'Helper',
+    title: 'Command Line',
     panels: {
       console: {
-        title: 'Console / Terminal',
+        title: 'Command Line',
         defaultOpen: false,
       },
       ai: {

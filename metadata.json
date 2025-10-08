@@ -1,5 +1,5 @@
 {
-  "name": "rpkgchat_v3",
+  "name": "rpkgchat_ai_terminal_v2",
   "description": "A professional-looking IDE layout with closable sidebars, a file explorer, a Monaco-powered code editor, and an integrated AI assistant. Features a tabbed console/terminal and collapsible panels for a flexible workspace.",
   "requestFramePermissions": []
 }

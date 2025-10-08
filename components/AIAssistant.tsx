@@ -1,140 +1,246 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, PlusIcon } from './icons';
-import { ChatMessage } from '../types';
-import { generateContentWithHistory } from '../services/geminiService';
-import Tooltip from './Tooltip';
+import { continueConversation } from '../services/geminiService';
+import { Message } from '../types';
+import { SendIcon } from './icons';
+import { useFileSystem } from '../contexts/FileSystemContext';
 import SamplePromptsModal from './SamplePromptsModal';
-import { parseCodeFromMarkdown } from '../utils/parser';
+import { Part, Content } from '@google/genai';
+import AIToolBadge from './AIToolBadge';
+import AIProgressTracker, { AIFileOperation } from './AIProgressTracker';
 
-const AIAssistant: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+interface AIAssistantProps {
+    userApiKey: string;
+}
+
+const AIAssistant: React.FC<AIAssistantProps> = ({ userApiKey }) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
+  const [fileOperations, setFileOperations] = useState<AIFileOperation[]>([]);
+
+  const { createNode, editFile, duplicateNode, getResourceFilesContent } = useFileSystem();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
+    const initialMessage = !userApiKey
+      ? "Hello! I am R Packager, your AI assistant. To get started, please provide your Gemini API key in the Settings page to use the assistant."
+      : "Hello! I am R Packager, your AI assistant for building R packages. I can help you create, edit, and duplicate files and folders within your '/Package' directory. How can I assist you today?";
+    
+    setMessages([{ 
+      role: 'model', 
+      content: initialMessage 
+    }]);
+  }, []); // Run only once on mount to set the initial message based on key presence.
+
+
+  useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages]);
+  
+  useEffect(() => {
+    if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [input]);
+
+  const handleSelectPrompt = (prompt: string) => {
+    setInput(prompt);
+    setIsPromptsModalOpen(false);
+  };
 
   const handleSend = async () => {
     if (input.trim() === '' || isLoading) return;
 
-    const userMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
-    setMessages(prev => [...prev, userMessage]);
+    // RAG: Retrieve context from /Resources folder
+    const resourceFiles = await getResourceFilesContent();
+    let contextString = '';
+    if (resourceFiles.length > 0) {
+        contextString = "Use the following content from the '/Resources' folder as context to answer my question:\n\n";
+        for (const file of resourceFiles) {
+            contextString += `--- START OF FILE: ${file.path} ---\n`;
+            contextString += `${file.content}\n`;
+            contextString += `--- END OF FILE: ${file.path} ---\n\n`;
+        }
+    }
+
+    const finalInput = contextString ? `${contextString}${input}` : input;
+
+    // Clear previous operation visuals when starting a new turn
+    setFileOperations([]);
+    const userMessage: Message = { role: 'user', content: finalInput };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
+    const apiHistory: Content[] = newMessages.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.content }],
+    }));
+    
     try {
-      const responseText = await generateContentWithHistory(input, messages);
-      const modelMessage: ChatMessage = { role: 'model', parts: [{ text: responseText }] };
-      setMessages(prev => [...prev, modelMessage]);
+        let finalResponseFound = false;
+        let toolsUsedInTurn: string[] = [];
+
+        while (!finalResponseFound) {
+            const response = await continueConversation(apiHistory, userApiKey);
+            
+            if (response.functionCalls && response.functionCalls.length > 0) {
+                apiHistory.push({ role: 'model', parts: response.functionCalls.map(fc => ({ functionCall: fc })) });
+                
+                // FIX: Cast `call.args.path` to string to satisfy AIFileOperation type.
+                const pendingOps: AIFileOperation[] = response.functionCalls.map(call => ({
+                    path: call.args.path as string,
+                    status: 'loading',
+                }));
+                setFileOperations(prev => [...prev, ...pendingOps]);
+
+                const toolResponses: Part[] = [];
+                for (const call of response.functionCalls) {
+                    toolsUsedInTurn.push(call.name);
+                    let result: { success: boolean, message: string };
+
+                    // FIX: Cast function call arguments to their expected types to resolve TypeScript errors.
+                    const path = call.args.path as string;
+
+                    switch (call.name) {
+                        case 'createNode':
+                            result = await createNode(path, call.args.type as 'file' | 'folder', call.args.content as string);
+                            break;
+                        case 'editFile':
+                            result = await editFile(path, call.args.content as string);
+                            break;
+                        case 'duplicateNode':
+                            result = await duplicateNode(path);
+                            break;
+                        default:
+                            result = { success: false, message: `Unknown function call: ${call.name}` };
+                    }
+
+                    if (result.success) {
+                        setFileOperations(prev => prev.map(op => 
+                            op.path === path ? { ...op, status: 'success' } : op
+                        ));
+                    } else {
+                         setFileOperations(prev => prev.filter(op => op.path !== path));
+                    }
+
+                    toolResponses.push({
+                        functionResponse: {
+                            name: call.name,
+                            response: { result: result.message },
+                        }
+                    });
+                }
+                apiHistory.push({ role: 'user', parts: toolResponses });
+            } else {
+                finalResponseFound = true;
+                const modelResponseText = response.text;
+                if (modelResponseText) {
+                    const newModelMessage: Message = { 
+                        role: 'model', 
+                        content: modelResponseText,
+                        toolsUsed: toolsUsedInTurn.length > 0 ? toolsUsedInTurn : undefined,
+                    };
+                    setMessages(prev => [...prev, newModelMessage]);
+                } else {
+                   const errorMessage: Message = { role: 'model', content: "I was unable to process that request. Please try again." };
+                   setMessages(prev => [...prev, errorMessage]);
+                }
+            }
+        }
     } catch (error) {
-      console.error(error);
-      const errorMessage: ChatMessage = { role: 'model', parts: [{ text: 'Sorry, I encountered an error. Please try again.' }] };
+      console.error("Gemini API error:", error);
+      const errorMessageContent = error instanceof Error && error.message.includes("API Key") 
+          ? "There's an issue with the API key. Please check your key in Settings or use the default."
+          : "An error occurred while fetching the response.";
+
+      const errorMessage: Message = { role: 'model', content: errorMessageContent };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+       setTimeout(() => {
+          setFileOperations([]);
+      }, 4000);
     }
   };
 
-  const handleSelectPrompt = (prompt: string) => {
-    setInput(prompt);
-    setIsModalOpen(false);
-  };
-  
-  const handleCopyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    // Consider adding a toast notification for better UX
-  };
-
-  const renderMessageContent = (text: string) => {
-    const parts = text.split(/(```[\s\S]*?```)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('```')) {
-        const codeBlocks = parseCodeFromMarkdown(part);
-        if (codeBlocks.length > 0) {
-          const { lang, code } = codeBlocks[0];
-          return (
-            <div key={index} className="bg-gray-800 rounded-md my-2">
-              <div className="flex justify-between items-center px-4 py-1 bg-gray-900 text-xs text-gray-400 rounded-t-md">
-                <span>{lang}</span>
-                <button onClick={() => handleCopyCode(code)} className="hover:text-white">Copy</button>
-              </div>
-              <pre className="p-4 text-sm text-white overflow-x-auto">
-                <code>{code}</code>
-              </pre>
-            </div>
-          );
-        }
-      }
-      return <span key={index}>{part}</span>;
-    });
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      <div className="flex-grow p-4 overflow-y-auto space-y-4">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-lg p-3 rounded-lg ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-slate-200 text-slate-800'}`}>
-              <div className="whitespace-pre-wrap text-sm">{renderMessageContent(msg.parts[0].text)}</div>
-            </div>
-          </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="max-w-lg p-3 rounded-lg bg-slate-200 text-slate-800">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse"></div>
-                <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-                <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+    <>
+      <div className="flex flex-col h-full bg-slate-50">
+        <div className="flex-grow h-96 overflow-y-auto p-2 text-sm space-y-4 custom-scrollbar">
+          {messages.map((msg, index) => (
+            <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`p-2 max-w-xs lg:max-w-md rounded-md ${msg.role === 'user' ? 'bg-blue-700 text-white' : 'bg-slate-100'}`}>
+                {msg.toolsUsed && msg.toolsUsed.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2 border-b border-slate-300 pb-2">
+                        {msg.toolsUsed.map(toolName => <AIToolBadge key={toolName} toolName={toolName} />)}
+                    </div>
+                )}
+                <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
               </div>
             </div>
+          ))}
+          {isLoading && !fileOperations.length && (
+            <div className="flex items-start">
+              <div className="p-2 bg-slate-200 rounded-md">
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        
+        <AIProgressTracker operations={fileOperations} />
+
+        <div className="p-2 border-t border-slate-200">
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask R Packager... (Shift+Enter for new line)"
+              disabled={isLoading}
+              className="flex-grow bg-white border border-slate-300 focus:outline-none focus:border-sky-500 px-2 py-2 text-sm rounded-md resize-none max-h-48 overflow-y-auto custom-scrollbar"
+            />
+            <button
+              onClick={handleSend}
+              disabled={isLoading}
+              className="flex-shrink-0 px-3 py-2 bg-slate-200 hover:bg-slate-300 disabled:bg-slate-100 disabled:cursor-not-allowed rounded-md"
+            >
+              <SendIcon className="w-5 h-5" />
+            </button>
           </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      <div className="p-2 border-t border-slate-200 bg-white">
-        <div className="relative">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Ask the AI assistant..."
-            className="w-full p-2 pr-20 border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-            rows={2}
-            disabled={isLoading}
-          />
-          <div className="absolute top-1/2 right-2 -translate-y-1/2 flex items-center">
-            <Tooltip text="Sample Prompts">
-                <button onClick={() => setIsModalOpen(true)} className="p-2 hover:bg-slate-200 rounded-full" disabled={isLoading} aria-label="Show sample prompts">
-                    <PlusIcon className="w-4 h-4 text-slate-600" />
-                </button>
-            </Tooltip>
-            <Tooltip text="Send">
-                <button onClick={handleSend} className="p-2 bg-sky-600 text-white rounded-full hover:bg-sky-700 disabled:bg-slate-400" disabled={isLoading || input.trim() === ''} aria-label="Send message">
-                    <SendIcon className="w-4 h-4" />
-                </button>
-            </Tooltip>
-          </div>
+           <button 
+              onClick={() => setIsPromptsModalOpen(true)}
+              className="text-xs text-sky-600 hover:text-sky-800 hover:underline mt-1.5 px-1"
+            >
+              Show Sample Prompts
+            </button>
         </div>
       </div>
-      <SamplePromptsModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSelectPrompt={handleSelectPrompt}
-      />
-    </div>
+      {isPromptsModalOpen && <SamplePromptsModal onClose={() => setIsPromptsModalOpen(false)} onSelectPrompt={handleSelectPrompt} />}
+    </>
   );
 };
 

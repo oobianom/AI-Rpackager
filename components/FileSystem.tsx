@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FileSystemNode } from '../types';
-import { ChevronDownIcon, ChevronRightIcon, FolderIcon, FileIcon, PencilIcon, CopyIcon, Trash2Icon } from './icons';
+import { ChevronDownIcon, ChevronRightIcon, FolderIcon, FileIcon, PencilIcon, CopyIcon, Trash2Icon, FolderLockIcon } from './icons';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 interface FileSystemTreeProps {
   node: FileSystemNode;
@@ -29,7 +30,11 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(node.name);
+  const [nodePendingDeletion, setNodePendingDeletion] = useState<FileSystemNode | null>(null);
+
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const isProtected = ['/Package', '/Resources'].includes(node.path);
 
   useEffect(() => {
     if (isRenaming) {
@@ -39,11 +44,11 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
   }, [isRenaming]);
 
   useEffect(() => {
-    if (nodeToRenamePath === node.path) {
+    if (nodeToRenamePath === node.path && !isProtected) {
         setIsRenaming(true);
         onRenameTriggered(); 
     }
-  }, [nodeToRenamePath, node.path, onRenameTriggered]);
+  }, [nodeToRenamePath, node.path, onRenameTriggered, isProtected]);
 
   const isFolder = node.type === 'folder';
   const isSelected = selectedNode?.path === node.path;
@@ -56,10 +61,15 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
     }
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete ${node.name}?`)) {
-      onDeleteNode(node.path);
+    setNodePendingDeletion(node);
+  };
+  
+  const handleConfirmDelete = () => {
+    if (nodePendingDeletion) {
+        onDeleteNode(nodePendingDeletion.path);
+        setNodePendingDeletion(null);
     }
   };
 
@@ -90,7 +100,13 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
   };
 
   return (
-    <div>
+    <>
+      <ConfirmDeleteModal 
+        isOpen={!!nodePendingDeletion}
+        nodeName={nodePendingDeletion?.name || ''}
+        onClose={() => setNodePendingDeletion(null)}
+        onConfirm={handleConfirmDelete}
+      />
       <div
         className={`flex items-center p-1 rounded-sm group ${isSelected ? 'bg-sky-200 hover:bg-sky-200' : 'hover:bg-slate-200'}`}
         style={{ paddingLeft: `${level * 16 + 4}px` }}
@@ -106,7 +122,10 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
         {isFolder ? (
           <>
             {isOpen ? <ChevronDownIcon className="w-4 h-4 mr-1 flex-shrink-0" /> : <ChevronRightIcon className="w-4 h-4 mr-1 flex-shrink-0" />}
-            <FolderIcon className="w-4 h-4 mr-2 text-sky-600 flex-shrink-0" />
+            {isProtected ? 
+                <FolderLockIcon className="w-4 h-4 mr-2 text-amber-600 flex-shrink-0" /> : 
+                <FolderIcon className="w-4 h-4 mr-2 text-sky-600 flex-shrink-0" />
+            }
           </>
         ) : (
           <>
@@ -132,9 +151,9 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
         
         {isHovered && !isRenaming && (
           <div className="flex items-center space-x-1 ml-auto pr-1 opacity-100 group-hover:opacity-100 transition-opacity">
-            <button onClick={handleRename} className="p-0.5 hover:bg-slate-300 rounded" aria-label={`Rename ${node.name}`}><PencilIcon className="w-3.5 h-3.5" /></button>
+            {!isProtected && <button onClick={handleRename} className="p-0.5 hover:bg-slate-300 rounded" aria-label={`Rename ${node.name}`}><PencilIcon className="w-3.5 h-3.5" /></button>}
             <button onClick={handleDuplicate} className="p-0.5 hover:bg-slate-300 rounded" aria-label={`Duplicate ${node.name}`}><CopyIcon className="w-3.5 h-3.5" /></button>
-            <button onClick={handleDelete} className="p-0.5 hover:bg-slate-300 rounded" aria-label={`Delete ${node.name}`}><Trash2Icon className="w-3.5 h-3.5" /></button>
+            {!isProtected && <button onClick={handleDeleteClick} className="p-0.5 hover:bg-slate-300 rounded" aria-label={`Delete ${node.name}`}><Trash2Icon className="w-3.5 h-3.5" /></button>}
           </div>
         )}
       </div>
@@ -156,7 +175,7 @@ const FileSystemTree: React.FC<FileSystemTreeProps> = ({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 };
 

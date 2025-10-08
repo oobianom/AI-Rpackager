@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import FileSystem from './FileSystem';
 import Tooltip from './Tooltip';
-import { PanelLeftCloseIcon, PlusIcon, UploadIcon, FolderIcon, DownloadIcon } from './icons';
+import { PanelLeftCloseIcon, PlusIcon, UploadIcon, FolderIcon, DownloadIcon, RefreshCwIcon } from './icons';
 import { sidebarConfig } from '../data/appConfig';
 import { FileSystemNode } from '../types';
 
@@ -12,13 +12,13 @@ interface MiddleSidebarProps {
   nodeToRename: string | null;
   onNodeSelect: (node: FileSystemNode) => void;
   onNewFile: (parentPath: string) => void;
-  onNewFolder: (path: string) => void;
+  onNewFolder: (parentPath: string) => void;
   onUploadFile: (fileName: string, content: string) => void;
   onDeleteNode: (path: string) => void;
   onRenameNode: (oldPath: string, newName: string) => void;
   onDuplicateNode: (path: string) => void;
-  onDownloadAll: () => void;
   onRenameTriggered: () => void;
+  onRefresh: () => void;
 }
 
 const MiddleSidebar: React.FC<MiddleSidebarProps> = ({ 
@@ -33,8 +33,8 @@ const MiddleSidebar: React.FC<MiddleSidebarProps> = ({
     onDeleteNode,
     onRenameNode,
     onDuplicateNode,
-    onDownloadAll,
     onRenameTriggered,
+    onRefresh,
 }) => {
     const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,12 +55,8 @@ const MiddleSidebar: React.FC<MiddleSidebarProps> = ({
     };
     
     const handleNewFolder = () => {
-        const folderName = prompt("Enter new folder name:");
-        if (folderName) {
-            const parentPath = getParentPathForNewNode();
-            const newPath = parentPath === '/' ? `/${folderName}` : `${parentPath}/${folderName}`;
-            onNewFolder(newPath);
-        }
+        const parentPath = getParentPathForNewNode();
+        onNewFolder(parentPath);
     };
 
     const handleUploadClick = () => {
@@ -104,9 +100,9 @@ const MiddleSidebar: React.FC<MiddleSidebarProps> = ({
                 <input type="file" ref={uploadInputRef} onChange={handleFileChange} className="hidden" />
               </button>
             </Tooltip>
-             <Tooltip text="Download Project">
-              <button onClick={onDownloadAll} className="p-1 hover:bg-slate-300 rounded" aria-label="Download project">
-                <DownloadIcon className="w-4 h-4" />
+            <Tooltip text="Refresh Explorer">
+              <button onClick={onRefresh} className="p-1 hover:bg-slate-300 rounded" aria-label="Refresh file explorer">
+                <RefreshCwIcon className="w-4 h-4" />
               </button>
             </Tooltip>
             <Tooltip text="Close Explorer">
@@ -116,7 +112,7 @@ const MiddleSidebar: React.FC<MiddleSidebarProps> = ({
             </Tooltip>
         </div>
       </div>
-      <div className="flex-grow p-2 overflow-y-auto">
+      <div className="flex-grow p-2 overflow-y-auto custom-scrollbar">
         <FileSystem 
             fileTree={fileTree} 
             selectedNode={selectedNode}
