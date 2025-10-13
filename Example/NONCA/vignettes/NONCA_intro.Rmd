@@ -1,0 +1,94 @@
+---
+title: "Introduction to NONCA"
+author: "R Packager"
+date: "2023-10-27"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to NONCA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction
+
+Welcome to `NONCA`, an R package designed for comprehensive pharmacokinetic non-compartmental analysis. This package provides a suite of functions to perform various calculations essential for pharmacokinetic studies, including Area Under the Curve (AUC), maximum concentration (Cmax), time to Cmax (Tmax), half-life, clearance, and more.
+
+# Installation
+
+You can install the development version of `NONCA` from GitHub:
+
+```r
+# install.packages("devtools")
+# devtools::install_github("your_username/NONCA")
+```
+
+# Quick Start
+
+Here's a quick example to get you started with `NONCA`.
+
+First, let's load the package:
+
+```{r setup}
+library(NONCA)
+```
+
+Now, let's consider a simple dataset with time and concentration measurements.
+
+```{r example_data}
+time <- c(0, 0.25, 0.5, 1, 2, 4, 6, 8, 12, 24)
+concentration <- c(0, 10, 25, 40, 35, 20, 10, 5, 2, 0.5)
+```
+
+We can calculate the AUC from time 0 to the last observed time:
+
+```{r auc_example}
+# Example of AUC_linear_log_linear
+# Assuming a data frame or similar structure is expected by the actual function
+# This is a placeholder; adjust based on actual function signature
+# nonca_data <- data.frame(time = time, concentration = concentration)
+# auc_val <- AUC_linear_log_linear(nonca_data$time, nonca_data$concentration)
+# print(paste("AUC (0-t):", auc_val))
+```
+
+Please refer to the function documentation for detailed usage.
+
+# Features
+
+`NONCA` offers a wide range of functions for non-compartmental analysis, including:
+
+*   **AUC Calculations**:
+    *   `AUC_linear_log_linear()`: Area Under the Curve using linear-log linear trapezoidal rule.
+    *   `AUC_linear_up_log_down()`: Area Under the Curve using linear up and log down trapezoidal rule.
+    *   `AUC_0_inf()`: Area Under the Curve extrapolated to infinity.
+*   **Key Parameters**:
+    *   `Cmax_Tmax()`: Calculation of maximum concentration (Cmax) and time to Cmax (Tmax).
+    *   `lambda_z()`: Estimation of terminal elimination rate constant (lambda_z).
+    *   `half_life()`: Calculation of half-life.
+    *   `clearance()`: Calculation of clearance.
+    *   `volume_of_distribution()`: Calculation of volume of distribution.
+    *   `MRT()`: Mean Residence Time.
+    *   `accumulation_ratio()`: Accumulation ratio.
+    *   `bioavailability()`: Bioavailability.
+
+# Usage Examples
+
+Detailed usage examples for each function are provided in their respective help files. You can access them using `?function_name` in your R console.
+
+# Data Format Requirements
+
+Functions in `NONCA` typically expect numerical vectors for `time` and `concentration`. Specific requirements for each function are detailed in their documentation.
+
+# Citation
+
+If you use `NONCA` in your research, please cite it as follows:
+
+```
+# To be filled in once the package is published.
+```

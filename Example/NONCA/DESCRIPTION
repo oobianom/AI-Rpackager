@@ -1,0 +1,16 @@
+Package: NONCA
+Title: Non-Compartmental Analysis for Pharmacokinetics
+Version: 0.1.0
+Author: Joe Doe 
+Maintainer: Joe Doe
+Description: Provides a comprehensive suite of functions for non-compartmental analysis (NCA) of pharmacokinetic data. Includes calculations for Area Under the Curve (AUC) using linear and log-linear trapezoidal methods, AUC from time 0 to infinity, maximum concentration (Cmax) and time to Cmax (Tmax), estimation of the terminal elimination rate constant (lambda_z), half-life, clearance, volume of distribution, Mean Residence Time (MRT), accumulation ratio, and bioavailability. Designed for ease of use, robust error handling, and generation of publication-ready results.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Suggests: 
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Imports: 
+    data.table
